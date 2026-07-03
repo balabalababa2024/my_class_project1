@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>API 测试</title>
+    <style>
+        body { font-family: Arial; padding: 20px; }
+        .result { margin: 10px 0; padding: 10px; background: #f5f5f5; }
+        .success { color: green; }
+        .error { color: red; }
+        button { margin: 5px; padding: 10px 20px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>API 连接测试</h1>
+    <button onclick="testRoot()">测试首页</button>
+    <button onclick="testCategory()">测试分类接口</button>
+    <button onclick="testLogin()">测试登录接口</button>
+    <div id="results"></div>
+
+    <script>
+        const results = document.getElementById('results');
+
+        function addResult(text, isSuccess) {
+            const div = document.createElement('div');
+            div.className = 'result ' + (isSuccess ? 'success' : 'error');
+            div.textContent = text;
+            results.appendChild(div);
+        }
+
+        async function testRoot() {
+            try {
+                const response = await fetch('/');
+                addResult(`首页: ${response.status} ${response.ok ? 'OK' : 'FAIL'}`, response.ok);
+            } catch (e) {
+                addResult(`首页错误: ${e.message}`, false);
+            }
+        }
+
+        async function testCategory() {
+            try {
+                const response = await fetch('/category/list');
+                const data = await response.json();
+                addResult(`分类接口: ${response.status} - ${JSON.stringify(data)}`, response.ok);
+            } catch (e) {
+                addResult(`分类接口错误: ${e.message}`, false);
+            }
+        }
+
+        async function testLogin() {
+            try {
+                const response = await fetch('/user/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ studentId: 'test', password: '123456' })
+                });
+                const data = await response.json();
+                addResult(`登录接口: ${response.status} - ${JSON.stringify(data)}`, true);
+            } catch (e) {
+                addResult(`登录接口错误: ${e.message}`, false);
+            }
+        }
+    </script>
+</body>
+</html>
