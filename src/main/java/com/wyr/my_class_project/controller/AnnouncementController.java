@@ -1,5 +1,6 @@
 package com.wyr.my_class_project.controller;
 
+import com.wyr.my_class_project.annotation.RequireAdmin;
 import com.wyr.my_class_project.common.Result;
 import com.wyr.my_class_project.entity.Announcement;
 import com.wyr.my_class_project.service.AnnouncementService;
@@ -38,6 +39,7 @@ public class AnnouncementController {
     /**
      * 创建公告(管理员)
      */
+    @RequireAdmin
     @PostMapping("/create")
     public Result<Announcement> create(HttpServletRequest request, @RequestBody Announcement announcement) {
         Long userId = (Long) request.getAttribute("userId");
@@ -49,6 +51,7 @@ public class AnnouncementController {
     /**
      * 更新公告(管理员)
      */
+    @RequireAdmin
     @PutMapping("/update")
     public Result<Announcement> update(@RequestBody Announcement announcement) {
         Announcement updated = announcementService.update(announcement);
@@ -58,6 +61,7 @@ public class AnnouncementController {
     /**
      * 删除公告(管理员)
      */
+    @RequireAdmin
     @DeleteMapping("/delete/{id}")
     public Result<Void> delete(@PathVariable Long id) {
         announcementService.delete(id);
@@ -67,6 +71,7 @@ public class AnnouncementController {
     /**
      * 获取所有公告(管理员)
      */
+    @RequireAdmin
     @GetMapping("/admin/all")
     public Result<List<Announcement>> getAll() {
         List<Announcement> announcements = announcementService.getAll();
@@ -76,6 +81,7 @@ public class AnnouncementController {
     /**
      * 更新公告状态(管理员)
      */
+    @RequireAdmin
     @PostMapping("/admin/status")
     public Result<Void> updateStatus(@RequestBody Map<String, Object> params) {
         Long id = Long.valueOf(params.get("id").toString());

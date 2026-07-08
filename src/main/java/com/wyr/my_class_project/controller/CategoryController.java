@@ -21,6 +21,7 @@ public class CategoryController {
     /**
      * 获取物品分类列表
      */
+
     @GetMapping("/list")
     public Result<List<Category>> list() {
         List<Category> categories = categoryMapper.selectList(

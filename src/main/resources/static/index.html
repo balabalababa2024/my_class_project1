@@ -850,6 +850,7 @@
             <button class="tab-item" data-tab="claims"><i class="fas fa-check-circle"></i>认领管理</button>
             <button class="tab-item" data-tab="messages"><i class="fas fa-envelope"></i>消息通知</button>
             <button class="tab-item" data-tab="profile"><i class="fas fa-user-cog"></i>个人中心</button>
+            <button class="tab-item" data-tab="announcement" id="announcementTab" style="display:none;"><i class="fas fa-bullhorn"></i>公告管理</button>
         </div>
 
         <!-- 内容区 -->
@@ -1104,7 +1105,73 @@
                     </div>
                 </div>
             </div>
+
+            <!-- ===== 公告管理(管理员) ===== -->
+            <div id="tab-announcement" class="sub-view">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                    <h3 style="color:#333; font-size:16px;">
+                        <i class="fas fa-bullhorn" style="color:#667eea; margin-right:8px;"></i>公告管理
+                    </h3>
+                    <button class="btn btn-primary" id="addAnnouncementBtn">
+                        <i class="fas fa-plus"></i> 发布公告
+                    </button>
+                </div>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>标题</th>
+                            <th>状态</th>
+                            <th>置顶</th>
+                            <th>发布时间</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="announcementTableBody">
+                        <!-- 公告列表 -->
+                    </tbody>
+                </table>
+            </div>
         </div>
+    </div>
+</div>
+
+<!-- 公告编辑模态框 -->
+<div class="modal-overlay" id="announcementModal">
+    <div class="modal">
+        <h3><i class="fas fa-bullhorn" style="color:#667eea;"></i> <span id="announcementModalTitle">发布公告</span></h3>
+        <form id="announcementForm">
+            <input type="hidden" id="announcementId" />
+            <div class="form-group">
+                <label>公告标题 <span class="required">*</span></label>
+                <input type="text" id="announcementTitle" placeholder="请输入公告标题" required />
+            </div>
+            <div class="form-group">
+                <label>公告内容 <span class="required">*</span></label>
+                <textarea id="announcementContent" placeholder="请输入公告内容" required style="min-height:150px;"></textarea>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>公告状态</label>
+                    <select id="announcementStatus">
+                        <option value="0">草稿</option>
+                        <option value="1" selected>已发布</option>
+                        <option value="2">已下架</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>是否置顶</label>
+                    <select id="announcementIsTop">
+                        <option value="0" selected>否</option>
+                        <option value="1">是</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline" id="announcementCancelBtn">取消</button>
+                <button type="submit" class="btn btn-primary">保存</button>
+            </div>
+        </form>
     </div>
 </div>
 
@@ -1183,6 +1250,7 @@ function switchTab(tabName) {
         case 'claims': loadClaims(); break;
         case 'messages': loadNotifications(); break;
         case 'profile': loadProfile(); break;
+        case 'announcement': loadAnnouncements(); break;
     }
 }
 
@@ -1488,6 +1556,87 @@ async function loadProfile() {
     }
 }
 
+// ===== 公告管理(管理员) =====
+async function loadAnnouncements() {
+    const data = await request('/announcement/admin/all');
+    if (data && data.code === 200) {
+        renderAnnouncementTable(data.data);
+    }
+}
+
+function renderAnnouncementTable(announcements) {
+    const tbody = $('announcementTableBody');
+
+    if (!announcements || announcements.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#999;">暂无公告</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = announcements.map(item => {
+        const statusMap = { 0: '草稿', 1: '已发布', 2: '已下架' };
+        const statusClassMap = { 0: 'pending', 1: 'claimed', 2: 'expired' };
+        const topMap = { 0: '否', 1: '是' };
+
+        return `<tr>
+            <td>${item.id}</td>
+            <td>${item.title}</td>
+            <td><span class="status-tag ${statusClassMap[item.status] || ''}">${statusMap[item.status] || '未知'}</span></td>
+            <td>${topMap[item.isTop] || '否'}</td>
+            <td>${formatDateTime(item.createdAt)}</td>
+            <td>
+                <div class="action-btns">
+                    <button class="action-btn btn-primary" onclick="editAnnouncement(${item.id})" style="background:#667eea; color:#fff;">
+                        <i class="fas fa-edit"></i> 编辑
+                    </button>
+                    <button class="action-btn btn-danger" onclick="deleteAnnouncement(${item.id})" style="background:#ff4757; color:#fff;">
+                        <i class="fas fa-trash"></i> 删除
+                    </button>
+                </div>
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+function openAnnouncementModal(data = null) {
+    $('announcementId').value = data ? data.id : '';
+    $('announcementTitle').value = data ? data.title : '';
+    $('announcementContent').value = data ? data.content : '';
+    $('announcementStatus').value = data ? data.status : '1';
+    $('announcementIsTop').value = data ? data.isTop : '0';
+    $('announcementModalTitle').textContent = data ? '编辑公告' : '发布公告';
+    $('announcementModal').classList.add('active');
+}
+
+async function editAnnouncement(id) {
+    const data = await request(`/announcement/detail/${id}`);
+    if (data && data.code === 200) {
+        openAnnouncementModal(data.data);
+    }
+}
+
+async function deleteAnnouncement(id) {
+    if (!confirm('确定要删除这个公告吗？')) {
+        return;
+    }
+
+    const result = await request(`/announcement/delete/${id}`, { method: 'DELETE' });
+    if (result && result.code === 200) {
+        alert('公告删除成功');
+        loadAnnouncements();
+    } else {
+        alert('删除失败：' + (result ? result.message : '未知错误'));
+    }
+}
+
+// 检查是否是管理员
+function checkAdminRole() {
+    if (currentUser && currentUser.role === 1) {
+        $('announcementTab').style.display = '';
+    } else {
+        $('announcementTab').style.display = 'none';
+    }
+}
+
 // ===== 渲染函数 =====
 function renderCategoryOptions() {
     const options = categories.map(c =>
@@ -1775,6 +1924,7 @@ if (loginForm) {
             loadCategories();
             loadDashboard();
             loadUnreadCount();
+            checkAdminRole();
         } else {
             alert('登录失败，请检查学号和密码');
         }
@@ -1808,6 +1958,7 @@ $('registerForm').addEventListener('submit', async (e) => {
         loadCategories();
         loadDashboard();
         loadUnreadCount();
+        checkAdminRole();
     } else {
         alert('注册失败，学号可能已被注册');
     }
@@ -2120,6 +2271,56 @@ if (executeMatchBtnEl) { executeMatchBtnEl.addEventListener('click', async () =>
 });
 }
 
+// 公告管理
+$('addAnnouncementBtn').onclick = () => openAnnouncementModal();
+
+$('announcementCancelBtn').onclick = () => {
+    $('announcementModal').classList.remove('active');
+    $('announcementForm').reset();
+};
+
+$('announcementForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const id = $('announcementId').value;
+    const data = {
+        title: $('announcementTitle').value.trim(),
+        content: $('announcementContent').value.trim(),
+        status: parseInt($('announcementStatus').value),
+        isTop: parseInt($('announcementIsTop').value)
+    };
+
+    if (!data.title || !data.content) {
+        alert('请填写完整信息');
+        return;
+    }
+
+    let result;
+    if (id) {
+        // 编辑
+        data.id = parseInt(id);
+        result = await request('/announcement/update', {
+            method: 'PUT',
+            body: JSON.stringify(data)
+        });
+    } else {
+        // 新增
+        result = await request('/announcement/create', {
+            method: 'POST',
+            body: JSON.stringify(data)
+        });
+    }
+
+    if (result && result.code === 200) {
+        alert(id ? '公告更新成功' : '公告发布成功');
+        $('announcementModal').classList.remove('active');
+        $('announcementForm').reset();
+        loadAnnouncements();
+    } else {
+        alert('操作失败：' + (result ? result.message : '未知错误'));
+    }
+});
+
 // ===== 全局函数 =====
 window.showItemDetail = async (id, type) => {
     const url = type === 'found' ? `/found/detail/${id}` : `/lost/detail/${id}`;
@@ -2202,6 +2403,7 @@ async function init() {
             loadDashboard();
             loadUnreadCount();
             isLoggedIn = true;
+            checkAdminRole();
         } else {
             clearToken();
             showView('loginView');
