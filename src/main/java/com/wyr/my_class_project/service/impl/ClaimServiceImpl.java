@@ -37,14 +37,18 @@ public class ClaimServiceImpl implements ClaimService {
     @Transactional
     public ClaimRequest create(ClaimRequest claimRequest) {
         // 检查是否已存在认领申请
-        Long count = claimRequestMapper.selectCount(
-                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<ClaimRequest>()
-                        .eq(ClaimRequest::getLostItemId, claimRequest.getLostItemId())
-                        .eq(ClaimRequest::getFoundItemId, claimRequest.getFoundItemId())
-                        .eq(ClaimRequest::getClaimerId, claimRequest.getClaimerId())
-                        .ne(ClaimRequest::getStatus, Constants.CLAIM_STATUS_CANCELLED)
-        );
+        com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<ClaimRequest> wrapper = new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<>();
+        wrapper.eq(ClaimRequest::getClaimerId, claimRequest.getClaimerId())
+               .ne(ClaimRequest::getStatus, Constants.CLAIM_STATUS_CANCELLED);
 
+        if (claimRequest.getLostItemId() != null) {
+            wrapper.eq(ClaimRequest::getLostItemId, claimRequest.getLostItemId());
+        }
+        if (claimRequest.getFoundItemId() != null) {
+            wrapper.eq(ClaimRequest::getFoundItemId, claimRequest.getFoundItemId());
+        }
+
+        Long count = claimRequestMapper.selectCount(wrapper);
         if (count > 0) {
             throw new BusinessException(ResultCode.CLAIM_ALREADY_EXISTS);
         }
@@ -52,15 +56,35 @@ public class ClaimServiceImpl implements ClaimService {
         claimRequest.setStatus(Constants.CLAIM_STATUS_PENDING);
         claimRequestMapper.insert(claimRequest);
 
-        // 发送通知给拾取者
-        LostItem lostItem = lostItemMapper.selectById(claimRequest.getLostItemId());
-        Notification notification = new Notification();
-        notification.setUserId(claimRequest.getOwnerId());
-        notification.setTitle("新的认领申请");
-        notification.setContent("有人认领了您拾到的 \"" + lostItem.getTitle() + "\"，请及时处理。");
-        notification.setType(Constants.NOTIFICATION_TYPE_CLAIM);
-        notification.setRelatedId(claimRequest.getId());
-        notificationService.send(notification);
+        // 发送通知给物品主人
+        String itemTitle = "";
+        Long notifyUserId = null;
+
+        if (claimRequest.getFoundItemId() != null) {
+            // 认领拾物，通知拾取者
+            FoundItem foundItem = foundItemMapper.selectById(claimRequest.getFoundItemId());
+            if (foundItem != null) {
+                itemTitle = foundItem.getTitle();
+                notifyUserId = foundItem.getUserId();
+            }
+        } else if (claimRequest.getLostItemId() != null) {
+            // 拾取者认领失物，通知失主
+            LostItem lostItem = lostItemMapper.selectById(claimRequest.getLostItemId());
+            if (lostItem != null) {
+                itemTitle = lostItem.getTitle();
+                notifyUserId = lostItem.getUserId();
+            }
+        }
+
+        if (notifyUserId != null) {
+            Notification notification = new Notification();
+            notification.setUserId(notifyUserId);
+            notification.setTitle("新的认领申请");
+            notification.setContent("有人认领了 \"" + itemTitle + "\"，请及时处理。");
+            notification.setType(Constants.NOTIFICATION_TYPE_CLAIM);
+            notification.setRelatedId(claimRequest.getId());
+            notificationService.send(notification);
+        }
 
         return claimRequest;
     }
@@ -87,19 +111,33 @@ public class ClaimServiceImpl implements ClaimService {
         claimRequestMapper.updateById(claim);
 
         // 更新物品状态
-        LostItem lostItem = lostItemMapper.selectById(claim.getLostItemId());
-        lostItem.setStatus(Constants.ITEM_STATUS_CLAIMED);
-        lostItemMapper.updateById(lostItem);
+        String itemTitle = "";
 
-        FoundItem foundItem = foundItemMapper.selectById(claim.getFoundItemId());
-        foundItem.setStatus(Constants.ITEM_STATUS_CLAIMED);
-        foundItemMapper.updateById(foundItem);
+        if (claim.getLostItemId() != null) {
+            LostItem lostItem = lostItemMapper.selectById(claim.getLostItemId());
+            if (lostItem != null) {
+                lostItem.setStatus(Constants.ITEM_STATUS_CLAIMED);
+                lostItemMapper.updateById(lostItem);
+                itemTitle = lostItem.getTitle();
+            }
+        }
+
+        if (claim.getFoundItemId() != null) {
+            FoundItem foundItem = foundItemMapper.selectById(claim.getFoundItemId());
+            if (foundItem != null) {
+                foundItem.setStatus(Constants.ITEM_STATUS_CLAIMED);
+                foundItemMapper.updateById(foundItem);
+                if (itemTitle.isEmpty()) {
+                    itemTitle = foundItem.getTitle();
+                }
+            }
+        }
 
         // 通知认领者
         Notification notification = new Notification();
         notification.setUserId(claim.getClaimerId());
         notification.setTitle("认领成功");
-        notification.setContent("您申请认领的 \"" + lostItem.getTitle() + "\" 已确认，请及时联系拾取者取回物品。");
+        notification.setContent("您申请认领的 \"" + itemTitle + "\" 已确认，请及时联系对方取回物品。");
         notification.setType(Constants.NOTIFICATION_TYPE_CLAIM);
         notification.setRelatedId(claim.getId());
         notificationService.send(notification);
@@ -125,12 +163,25 @@ public class ClaimServiceImpl implements ClaimService {
         claim.setStatus(Constants.CLAIM_STATUS_REJECTED);
         claimRequestMapper.updateById(claim);
 
+        // 获取物品标题
+        String itemTitle = "";
+        if (claim.getLostItemId() != null) {
+            LostItem lostItem = lostItemMapper.selectById(claim.getLostItemId());
+            if (lostItem != null) {
+                itemTitle = lostItem.getTitle();
+            }
+        } else if (claim.getFoundItemId() != null) {
+            FoundItem foundItem = foundItemMapper.selectById(claim.getFoundItemId());
+            if (foundItem != null) {
+                itemTitle = foundItem.getTitle();
+            }
+        }
+
         // 通知认领者
-        LostItem lostItem = lostItemMapper.selectById(claim.getLostItemId());
         Notification notification = new Notification();
         notification.setUserId(claim.getClaimerId());
         notification.setTitle("认领被拒绝");
-        notification.setContent("您申请认领的 \"" + lostItem.getTitle() + "\" 被拒绝，您可以重新发起认领或联系管理员。");
+        notification.setContent("您申请认领的 \"" + itemTitle + "\" 被拒绝，您可以重新发起认领或联系管理员。");
         notification.setType(Constants.NOTIFICATION_TYPE_CLAIM);
         notification.setRelatedId(claim.getId());
         notificationService.send(notification);
@@ -171,13 +222,21 @@ public class ClaimServiceImpl implements ClaimService {
 
         // 如果确认认领，更新物品状态
         if (status == Constants.CLAIM_STATUS_CONFIRMED) {
-            LostItem lostItem = lostItemMapper.selectById(claim.getLostItemId());
-            lostItem.setStatus(Constants.ITEM_STATUS_CLAIMED);
-            lostItemMapper.updateById(lostItem);
+            if (claim.getLostItemId() != null) {
+                LostItem lostItem = lostItemMapper.selectById(claim.getLostItemId());
+                if (lostItem != null) {
+                    lostItem.setStatus(Constants.ITEM_STATUS_CLAIMED);
+                    lostItemMapper.updateById(lostItem);
+                }
+            }
 
-            FoundItem foundItem = foundItemMapper.selectById(claim.getFoundItemId());
-            foundItem.setStatus(Constants.ITEM_STATUS_CLAIMED);
-            foundItemMapper.updateById(foundItem);
+            if (claim.getFoundItemId() != null) {
+                FoundItem foundItem = foundItemMapper.selectById(claim.getFoundItemId());
+                if (foundItem != null) {
+                    foundItem.setStatus(Constants.ITEM_STATUS_CLAIMED);
+                    foundItemMapper.updateById(foundItem);
+                }
+            }
         }
 
         // 通知双方

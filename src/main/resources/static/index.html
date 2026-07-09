@@ -2242,9 +2242,12 @@ $('claimForm').addEventListener('submit', async (e) => {
         proofImage = await uploadFile(imageFile, 'proof');
     }
 
+    const lostItemIdVal = $('claimLostItemId').value;
+    const foundItemIdVal = $('claimFoundItemId').value;
+
     const data = {
-        lostItemId: parseInt($('claimLostItemId').value),
-        foundItemId: parseInt($('claimFoundItemId').value),
+        lostItemId: lostItemIdVal ? parseInt(lostItemIdVal) : null,
+        foundItemId: foundItemIdVal ? parseInt(foundItemIdVal) : null,
         ownerId: parseInt($('claimOwnerId').value),
         description: $('claimDescription').value.trim(),
         proofImage: proofImage
@@ -2346,6 +2349,24 @@ window.showItemDetail = async (id, type) => {
     const data = await request(url);
     if (data && data.code === 200) {
         const item = data.data;
+        const isFound = type === 'found';
+        const canClaim = item.status === 0 || item.status === 1; // 待匹配或待认领状态可认领
+
+        let claimButton = '';
+        if (canClaim && currentUser) {
+            if (isFound) {
+                // 认领拾物：我是失主，ownerId是拾取者（物品发布者）
+                claimButton = `<button class="btn btn-primary" onclick="openClaimModalDirect(${item.id}, null, ${item.userId})" style="margin-top:12px; width:100%;">
+                    <i class="fas fa-hand-holding-heart"></i> 我要认领（我是失主）
+                </button>`;
+            } else {
+                // 认领失物：我是拾取者，ownerId是当前用户（我）
+                claimButton = `<button class="btn btn-primary" onclick="openClaimModalDirect(null, ${item.id}, ${currentUser.id})" style="margin-top:12px; width:100%;">
+                    <i class="fas fa-hand-holding-heart"></i> 我是拾取者，发起认领
+                </button>`;
+            }
+        }
+
         $('detailContent').innerHTML = `
             <div style="margin-bottom:16px;">
                 <h4>${item.title}</h4>
@@ -2357,6 +2378,7 @@ window.showItemDetail = async (id, type) => {
                 <p><strong>状态：</strong><span class="status-tag ${getStatusClass(item.status)}">${getStatusText(item.status)}</span></p>
             </div>
             ${item.imageUrl ? `<img src="${item.imageUrl}" style="max-width:100%; border-radius:8px;" />` : ''}
+            ${claimButton}
         `;
         $('detailModal').classList.add('active');
     }
@@ -2400,10 +2422,18 @@ window.markAsRead = async (id) => {
 };
 
 window.openClaimModal = (foundItemId, lostItemId, ownerId) => {
-    $('claimFoundItemId').value = foundItemId;
-    $('claimLostItemId').value = lostItemId;
+    $('claimFoundItemId').value = foundItemId || '';
+    $('claimLostItemId').value = lostItemId || '';
     $('claimOwnerId').value = ownerId;
     $('claimModal').classList.add('active');
+};
+
+// 直接打开认领模态框（从物品详情调用）
+window.openClaimModalDirect = (foundItemId, lostItemId, ownerId) => {
+    // 关闭详情弹窗
+    $('detailModal').classList.remove('active');
+    // 打开认领模态框
+    openClaimModal(foundItemId, lostItemId, ownerId);
 };
 
 // ===== 初始化 =====

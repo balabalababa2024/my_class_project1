@@ -80,8 +80,8 @@ CREATE TABLE match_record (
 -- 认领申请表
 CREATE TABLE claim_request (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
-    lost_item_id BIGINT NOT NULL COMMENT '失物ID',
-    found_item_id BIGINT NOT NULL COMMENT '拾物ID',
+    lost_item_id BIGINT COMMENT '失物ID',
+    found_item_id BIGINT COMMENT '拾物ID',
     claimer_id BIGINT NOT NULL COMMENT '认领者ID',
     owner_id BIGINT NOT NULL COMMENT '拾取者ID',
     description TEXT COMMENT '认领说明',
