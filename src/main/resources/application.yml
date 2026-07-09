@@ -43,11 +43,6 @@ jwt:
   secret: campus-lost-found-secret-key-2024-very-long-secret-1234567890
   expiration: 86400000  # 24小时
 
-# 文件上传配置
-upload:
-  path: ./uploads/
-  url-prefix: /files/
-
 # 日志配置
 logging:
   level:
